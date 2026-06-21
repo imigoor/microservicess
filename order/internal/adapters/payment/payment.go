@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 type Adapter struct {
@@ -43,7 +44,7 @@ func (a *Adapter) Charge(order *domain.Order) error {
 		TotalPrice: order.TotalPrice(),
 	})
 	if err != nil {
-		if codes.Code(codes.DeadlineExceeded) == codes.DeadlineExceeded {
+		if status.Code(err) == codes.DeadlineExceeded {
 			log.Printf("payment charge timeout: deadline exceeded for order %d", order.ID)
 		}
 		log.Printf("payment charge error: %v", err)
