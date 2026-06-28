@@ -23,6 +23,13 @@ type OrderItem struct {
 	OrderID     uint
 }
 
+type Product struct {
+	gorm.Model
+	ProductCode string `gorm:"uniqueIndex;size:100"`
+	Name        string
+	Stock       int32
+}
+
 type Adapter struct {
 	db *gorm.DB
 }
@@ -32,7 +39,7 @@ func NewAdapter(dataSourceUrl string) (*Adapter, error) {
 	if openErr != nil {
 		return nil, fmt.Errorf("db connection error: %v", openErr)
 	}
-	err := db.AutoMigrate(&Order{}, OrderItem{})
+	err := db.AutoMigrate(&Order{}, &OrderItem{}, &Product{})
 	if err != nil {
 		return nil, fmt.Errorf("db migration error: %v", err)
 	}
@@ -41,7 +48,7 @@ func NewAdapter(dataSourceUrl string) (*Adapter, error) {
 
 func (a Adapter) Get(id string) (domain.Order, error) {
 	var orderEntity Order
-	res := a.db.First(&orderEntity, id)
+	res := a.db.Preload("OrderItems").First(&orderEntity, id)
 	var orderItems []domain.OrderItem
 	for _, orderItem := range orderEntity.OrderItems {
 		orderItems = append(orderItems, domain.OrderItem{
@@ -84,4 +91,10 @@ func (a Adapter) Save(order *domain.Order) error {
 func (a Adapter) UpdateStatus(order *domain.Order) error {
 	res := a.db.Model(&Order{}).Where("id = ?", order.ID).Update("status", order.Status)
 	return res.Error
+}
+
+func (a Adapter) ProductExists(productCode string) bool {
+	var product Product
+	res := a.db.Where("product_code = ?", productCode).First(&product)
+	return res.Error == nil
 }

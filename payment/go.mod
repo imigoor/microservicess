@@ -21,4 +21,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/ruandg/microservices-proto/golang/payment => ../../microservices-proto/golang/payment
+replace github.com/ruandg/microservices-proto/golang/payment => /microservices-proto/golang/payment

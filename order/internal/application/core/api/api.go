@@ -8,14 +8,16 @@ import (
 )
 
 type Application struct {
-	db      ports.DBPort
-	payment ports.PaymentPort
+	db       ports.DBPort
+	payment  ports.PaymentPort
+	shipping ports.ShippingPort
 }
 
-func NewApplication(db ports.DBPort, payment ports.PaymentPort) *Application {
+func NewApplication(db ports.DBPort, payment ports.PaymentPort, shipping ports.ShippingPort) *Application {
 	return &Application{
-		db:      db,
-		payment: payment,
+		db:       db,
+		payment:  payment,
+		shipping: shipping,
 	}
 }
 
@@ -26,6 +28,12 @@ func (a Application) PlaceOrder(order domain.Order) (domain.Order, error) {
 	}
 	if totalQuantity > 50 {
 		return domain.Order{}, status.Errorf(codes.InvalidArgument, "Order with more than 50 items is not allowed.")
+	}
+
+	for _, item := range order.OrderItems {
+		if !a.db.ProductExists(item.ProductCode) {
+			return domain.Order{}, status.Errorf(codes.NotFound, "Product %s not found in stock.", item.ProductCode)
+		}
 	}
 
 	err := a.db.Save(&order)
@@ -40,6 +48,13 @@ func (a Application) PlaceOrder(order domain.Order) (domain.Order, error) {
 		order.Status = "Canceled"
 		a.db.UpdateStatus(&order)
 		return domain.Order{}, paymentErr
+	}
+
+	_, shippingErr := a.shipping.Ship(&order)
+	if shippingErr != nil {
+		order.Status = "Canceled"
+		a.db.UpdateStatus(&order)
+		return domain.Order{}, shippingErr
 	}
 
 	order.Status = "Paid"

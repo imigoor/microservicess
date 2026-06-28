@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql-grpc
+    environment:
+      MYSQL_ROOT_PASSWORD: minhasenha
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pminhasenha"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payment:
+    build:
+      context: .. # Sobe para C:\zDev
+      dockerfile: microservices/payment/Dockerfile
+    container_name: payment-service
+    environment:
+      DATA_SOURCE_URL: root:minhasenha@tcp(mysql:3306)/payment?charset=utf8mb4&parseTime=True&loc=Local
+      APPLICATION_PORT: "3001"
+      ENV: development
+    ports:
+      - "3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  shipping:
+    build: 
+      context: ../ # Sobe para C:\zDev
+      dockerfile: microservices/shipping/Dockerfile
+    container_name: shipping-service
+    environment:
+      DATA_SOURCE_URL: root:minhasenha@tcp(mysql:3306)/shipping?charset=utf8mb4&parseTime=True&loc=Local
+      APPLICATION_PORT: "3002"
+      ENV: development
+    ports:
+      - "3002:3002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  order:
+    build: 
+      context: .. # Sobe para C:\zDev
+      dockerfile: microservices/order/Dockerfile
+    container_name: order-service
+    environment:
+      DATA_SOURCE_URL: root:minhasenha@tcp(mysql:3306)/orders?charset=utf8mb4&parseTime=True&loc=Local
+      APPLICATION_PORT: "3000"
+      ENV: development
+      PAYMENT_SERVICE_URL: payment:3001
+      SHIPPING_SERVICE_URL: shipping:3002
+    ports:
+      - "3000:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      payment:
+        condition: service_started
+      shipping:
+        condition: service_started
