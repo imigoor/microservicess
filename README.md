@@ -1,12 +1,22 @@
-# Microsserviços com gRPC
+# Ecossistema de Microsserviços com gRPC e Docker
 
-Projeto de microsserviços implementado em Go com arquitetura hexagonal e comunicação via gRPC.
+Projeto final construído em Go. O sistema implementa uma arquitetura hexagonal, comunicação via gRPC, persistência segregada e orquestração resiliente com Docker.
+
+## Cumprimento dos Requisitos
+
+Este repositório atende a todos os critérios exigidos:
+
+1. **Arquitetura Hexagonal (Ports and Adapters):** A lógica de negócio (`internal/application/core`) está estritamente isolada da infraestrutura (`internal/adapters`).
+2. **Comunicação gRPC:** Os serviços trocam mensagens utilizando contratos rígidos via Protocol Buffers (`.proto`).
+3. **Database per Service:** O sistema garante isolamento de estado. Um único container MySQL gerencia bancos distintos (`orders`, `payment`, `shipping`).
+4. **Docker Multi-stage Build:** Os `Dockerfile`s utilizam compilação em múltiplos estágios com Alpine Linux, resultando em imagens seguras e extremamente leves.
+5. **Orquestração e Resiliência (Auto-healing):** O `docker-compose.yml` sobe a infraestrutura completa. Os microsserviços possuem políticas de `restart: on-failure` e `healthchecks`, aguardando automaticamente o banco de dados estar pronto sem intervenção manual.
 
 ## Microsserviços
 
-- **Order** (porta 3000) — recebe pedidos, valida estoque, aciona Payment e Shipping
-- **Payment** (porta 3001) — processa cobranças
-- **Shipping** (porta 3002) — calcula prazo de entrega
+- **Order** (porta 3000) — recebe pedidos, valida estoque, aciona Payment e Shipping.
+- **Payment** (porta 3001) — processa as transações financeiras.
+- **Shipping** (porta 3002) — calcula o prazo de entrega com base no volume.
 
 ## Pré-requisitos
 
@@ -14,81 +24,53 @@ Projeto de microsserviços implementado em Go com arquitetura hexagonal e comuni
 - Go 1.21+
 - grpcurl (para testes)
 
-## Executando com Docker Compose
+## Executando o Projeto (Docker)
 
+Esta é a forma recomendada de avaliar o projeto, pois garante o isolamento total.
+
+**1. Suba a infraestrutura completa:**
 ```bash
 docker-compose up --build
 ```
+*(Nota: Na primeira vez, o MySQL fará sua inicialização. Os microsserviços reiniciarão sozinhos até que o banco esteja pronto).*
 
-## Executando manualmente (Windows)
-
-**1. MySQL:**
-```bat
-docker run -p 3306:3306 -e MYSQL_ROOT_PASSWORD=minhasenha --name mysql-grpc -d mysql
-docker exec -it mysql-grpc mysql -u root -pminhasenha -e "CREATE DATABASE IF NOT EXISTS orders; CREATE DATABASE IF NOT EXISTS payment; CREATE DATABASE IF NOT EXISTS shipping;"
-```
-
-**2. Payment (CMD 1):**
-```bat
-cd payment
-set DATA_SOURCE_URL=root:minhasenha@tcp(127.0.0.1:3306)/payment
-set APPLICATION_PORT=3001
-set ENV=development
-go run cmd/main.go
-```
-
-**3. Shipping (CMD 2):**
-```bat
-cd shipping
-set DATA_SOURCE_URL=root:minhasenha@tcp(127.0.0.1:3306)/shipping
-set APPLICATION_PORT=3002
-set ENV=development
-go run cmd/main.go
-```
-
-**4. Order (CMD 3):**
-```bat
-cd order
-set DATA_SOURCE_URL=root:minhasenha@tcp(127.0.0.1:3306)/orders
-set APPLICATION_PORT=3000
-set ENV=development
-set PAYMENT_SERVICE_URL=localhost:3001
-set SHIPPING_SERVICE_URL=localhost:3002
-go run cmd/main.go
-```
-
-**5. Cadastrar produtos no estoque:**
-```bat
+**2. Cadastre produtos no banco de dados (Estoque):**
+Em um novo terminal, rode o comando abaixo para injetar os dados iniciais:
+```bash
 docker exec -it mysql-grpc mysql -u root -pminhasenha -e "INSERT INTO orders.products (product_code, name, stock, created_at, updated_at) VALUES ('prod1', 'Produto 1', 100, NOW(), NOW()), ('prod2', 'Produto 2', 50, NOW(), NOW());"
 ```
 
-## Testando com grpcurl
+## Testando com grpcurl (Cenários de Validação)
 
-**Pedido normal:**
+Com o ambiente rodando, você pode validar as regras de negócio disparando os comandos abaixo:
+
+**✅ Pedido normal (Sucesso total):**
 ```bash
 grpcurl -d "{\"costumer_id\": 1, \"order_items\": [{\"product_code\": \"prod1\", \"unit_price\": 10.0, \"quantity\": 2}]}" -plaintext localhost:3000 Order/Create
 ```
 
-**Produto inexistente:**
+**❌ Regra 1: Produto inexistente no banco:**
 ```bash
 grpcurl -d "{\"costumer_id\": 1, \"order_items\": [{\"product_code\": \"inexistente\", \"unit_price\": 10.0, \"quantity\": 2}]}" -plaintext localhost:3000 Order/Create
 ```
 
-**Valor maior que 1000:**
+**❌ Regra 2: Valor do pedido maior que 1000:**
 ```bash
 grpcurl -d "{\"costumer_id\": 1, \"order_items\": [{\"product_code\": \"prod1\", \"unit_price\": 200.0, \"quantity\": 6}]}" -plaintext localhost:3000 Order/Create
 ```
 
-**Mais de 50 itens:**
+**❌ Regra 3: Pedido com mais de 50 itens:**
 ```bash
 grpcurl -d "{\"costumer_id\": 1, \"order_items\": [{\"product_code\": \"prod1\", \"unit_price\": 10.0, \"quantity\": 51}]}" -plaintext localhost:3000 Order/Create
 ```
 
-## Prazo de entrega
+## Regra de Negócio: Prazo de Entrega (Shipping)
 
-O prazo mínimo é 1 dia. A cada 5 unidades (somando todos os itens) é adicionado 1 dia.
+O prazo de entrega é calculado de forma dinâmica pelo microsserviço de frete, isolado do contexto de pedidos.
+- O prazo mínimo padrão é de **1 dia**.
+- A cada **5 unidades** somadas no pedido, adiciona-se **1 dia extra** ao frete.
 
-Exemplos:
+**Exemplos:**
 - 2 unidades → 1 dia
 - 5 unidades → 2 dias
 - 10 unidades → 3 dias
