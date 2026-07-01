@@ -21,6 +21,7 @@ services:
       context: .. # Sobe para C:\zDev
       dockerfile: microservices/payment/Dockerfile
     container_name: payment-service
+    restart: on-failure
     environment:
       DATA_SOURCE_URL: root:minhasenha@tcp(mysql:3306)/payment?charset=utf8mb4&parseTime=True&loc=Local
       APPLICATION_PORT: "3001"
@@ -36,6 +37,7 @@ services:
       context: ../ # Sobe para C:\zDev
       dockerfile: microservices/shipping/Dockerfile
     container_name: shipping-service
+    restart: on-failure
     environment:
       DATA_SOURCE_URL: root:minhasenha@tcp(mysql:3306)/shipping?charset=utf8mb4&parseTime=True&loc=Local
       APPLICATION_PORT: "3002"
@@ -51,6 +53,7 @@ services:
       context: .. # Sobe para C:\zDev
       dockerfile: microservices/order/Dockerfile
     container_name: order-service
+    restart: on-failure
     environment:
       DATA_SOURCE_URL: root:minhasenha@tcp(mysql:3306)/orders?charset=utf8mb4&parseTime=True&loc=Local
       APPLICATION_PORT: "3000"
